@@ -7,6 +7,12 @@ license = "MIT"
 build = "build.rs"
 
 [dependencies]
+anyhow = "1.0.100"
+bluer = { version = "0.17.4", features = ["bluetoothd"] }
+clap = { version = "4.5.48", features = ["derive"] }
+futures = "0.3.31"
+tokio = { version = "1.47.1", features = ["rt-multi-thread", "macros", "time"] }
+uuid = "1.18.1"
 
 [build-dependencies]
 vergen-gitcl = { version = "1.0.8", features = ["rustc", "cargo"] }
