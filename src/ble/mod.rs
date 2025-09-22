@@ -8,6 +8,8 @@ use clap::Parser;
 use futures::StreamExt;
 use uuid::Uuid;
 
+use crate::db;
+
 // https://bthome.io/format
 const SERVICE_DATA_UUID_16: u8 = 0x16;
 const START_POSITION: u8 = 0x00;
@@ -28,6 +30,8 @@ struct Cli {}
 
 pub async fn run_main() -> anyhow::Result<()> {
     let _cli = Cli::parse();
+
+    let db = db::Db::connect("sqlite://db/dev.db").await?;
 
     let pattern = Pattern {
         data_type: SERVICE_DATA_UUID_16,
@@ -65,11 +69,20 @@ pub async fn run_main() -> anyhow::Result<()> {
                 let bthome_data = service_data
                     .get(&BTHOME_UUID)
                     .ok_or_else(|| anyhow::anyhow!("No BTHome service data found"))?;
-                println!(
-                    "On device {:?}, received event {:?}",
-                    dev,
-                    parser::parse_bthome_service_data(bthome_data)
-                );
+
+                if let Some(sample) = parser::parse_bthome_service_data(bthome_data) {
+                    db::queries::insert_sample(
+                        db.pool(),
+                        &dev.address().to_string(),
+                        sample.packet_counter,
+                        sample.temperature,
+                        sample.humidity,
+                        sample.battery,
+                    )
+                    .await?;
+
+                    println!("On device {:?}, received event {:?}", dev, sample,);
+                }
             }
         }
     }
