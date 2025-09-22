@@ -1,5 +1,7 @@
 mod parser;
 
+use std::path::PathBuf;
+
 use bluer::{
     DeviceEvent, DeviceProperty,
     monitor::{Monitor, MonitorEvent, Pattern},
@@ -7,6 +9,8 @@ use bluer::{
 use clap::Parser;
 use futures::StreamExt;
 use uuid::Uuid;
+
+use crate::{config, db};
 
 // https://bthome.io/format
 const SERVICE_DATA_UUID_16: u8 = 0x16;
@@ -24,10 +28,16 @@ const BTHOME_UUID: Uuid = Uuid::from_u128(0x0000_fcd2_0000_1000_8000_0080_5f9b_3
     long_about = None,
     version = concat!("git:", env!("VERGEN_GIT_SHA")),
     max_term_width = 120)]
-struct Cli {}
+struct Cli {
+    #[arg(long)]
+    config: PathBuf,
+}
 
 pub async fn run_main() -> anyhow::Result<()> {
-    let _cli = Cli::parse();
+    let cli = Cli::parse();
+    let config = config::read(&cli.config).expect("error parsing config");
+
+    let db = db::Db::connect(config.database_url.as_str()).await?;
 
     let pattern = Pattern {
         data_type: SERVICE_DATA_UUID_16,
@@ -65,11 +75,20 @@ pub async fn run_main() -> anyhow::Result<()> {
                 let bthome_data = service_data
                     .get(&BTHOME_UUID)
                     .ok_or_else(|| anyhow::anyhow!("No BTHome service data found"))?;
-                println!(
-                    "On device {:?}, received event {:?}",
-                    dev,
-                    parser::parse_bthome_service_data(bthome_data)
-                );
+
+                if let Some(sample) = parser::parse_bthome_service_data(bthome_data) {
+                    db::queries::insert_sample(
+                        db.pool(),
+                        &dev.address().to_string(),
+                        sample.packet_counter,
+                        sample.temperature,
+                        sample.humidity,
+                        sample.battery,
+                    )
+                    .await?;
+
+                    println!("On device {:?}, received event {:?}", dev, sample,);
+                }
             }
         }
     }
