@@ -1,5 +1,7 @@
 mod parser;
 
+use std::path::PathBuf;
+
 use bluer::{
     DeviceEvent, DeviceProperty,
     monitor::{Monitor, MonitorEvent, Pattern},
@@ -8,7 +10,7 @@ use clap::Parser;
 use futures::StreamExt;
 use uuid::Uuid;
 
-use crate::db;
+use crate::{config, db};
 
 // https://bthome.io/format
 const SERVICE_DATA_UUID_16: u8 = 0x16;
@@ -26,12 +28,16 @@ const BTHOME_UUID: Uuid = Uuid::from_u128(0x0000_fcd2_0000_1000_8000_0080_5f9b_3
     long_about = None,
     version = concat!("git:", env!("VERGEN_GIT_SHA")),
     max_term_width = 120)]
-struct Cli {}
+struct Cli {
+    #[arg(long)]
+    config: PathBuf,
+}
 
 pub async fn run_main() -> anyhow::Result<()> {
-    let _cli = Cli::parse();
+    let cli = Cli::parse();
+    let config = config::read(&cli.config).expect("error parsing config");
 
-    let db = db::Db::connect("sqlite://db/dev.db").await?;
+    let db = db::Db::connect(config.database_url.as_str()).await?;
 
     let pattern = Pattern {
         data_type: SERVICE_DATA_UUID_16,
