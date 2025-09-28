@@ -8,6 +8,7 @@ use bluer::{
 };
 use clap::Parser;
 use futures::StreamExt;
+use tracing::{debug, info};
 use uuid::Uuid;
 
 use crate::{config, db};
@@ -34,6 +35,8 @@ struct Cli {
 }
 
 pub async fn run_main() -> anyhow::Result<()> {
+    tracing_subscriber::fmt::init();
+
     let cli = Cli::parse();
     let config = config::read(&cli.config).expect("error parsing config");
 
@@ -47,11 +50,8 @@ pub async fn run_main() -> anyhow::Result<()> {
 
     let session = bluer::Session::new().await?;
     let adapter = session.default_adapter().await?;
-    println!(
-        "Starting scan on Bluetooth adapter {} with pattern {:?}",
-        adapter.name(),
-        pattern
-    );
+
+    info!(?adapter, ?pattern, "Starting BLE scan");
 
     adapter.set_powered(true).await?;
 
@@ -87,7 +87,9 @@ pub async fn run_main() -> anyhow::Result<()> {
                     )
                     .await?;
 
-                    println!("On device {:?}, received event {:?}", dev, sample,);
+                    debug!(?dev, ?sample, "Parsed BTHome service data");
+                } else {
+                    debug!(?dev, ?bthome_data, "Failed to parse BTHome service data");
                 }
             }
         }
